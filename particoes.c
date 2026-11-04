@@ -60,24 +60,155 @@ void classificacao_interna(FILE *arq, Lista *nome_arquivos_saida, int M, int nFu
     }
 }
 
-void selecao_natural(FILE *arq, Lista *nome_arquivos_saida, int M, int nFunc, int n){
-    /*Utliza RESERVATORIO 
-    RESERVATORIO é em memoria secundaria.
-    Condiçao para parada: .Reservatório Cheio:Não há mais espaço livre na memória secundária reservada.
-                          .Fim dos Registros: Terminarem todos os registros do arquivo de entrada
-                     
-    O LOOP:
-    1 - Ler M registros do arquivo para a memória
-    2 - Selecionar no array em memória o registro 'r' com menor chave
-    3 - Gravar o registro 'r' na partição de saída
-    4 - Substituir no array o registro 'r' pelo próximo do arquivo de entrada
-    5 - Se a chave deste for menor que a recém-gravada, coloca ela no reservatório e substituir 'r' pelo próximo registro
-    6 - Se ainda tiver espaço livro no reservatório, volta no passo 2
-    Caso nao tiver espaço no reservatório:
-    -Fechar a partição de saída
-    -Copiar os registros do reservatório para o array em memória
-    -Esvaziar o reservatório
-    -Abrir nova partição de saída
-    -Voltar no Passo 2
-    */
+/* ===================== SELECAO NATURAL ===================== */
+
+#define NOME_RESERVATORIO "reservatorio.dat"
+
+/* Le o registro de indice 'pos' do arquivo de entrada (NULL se nao existir). */
+static TFunc *le_registro_entrada(FILE *arq, int pos) {
+    fseek(arq, pos * tamanho_registro(), SEEK_SET);
+    return le_funcionario(arq);
+}
+
+/* Retorna a posicao do registro de menor chave no array em memoria
+   (posicoes vazias sao NULL). Retorna -1 se a memoria estiver vazia. */
+static int posicao_menor_chave(TFunc **memoria, int M) {
+    int pos = -1;
+    for (int i = 0; i < M; i++) {
+        if (memoria[i] != NULL && (pos == -1 || memoria[i]->cod < memoria[pos]->cod))
+            pos = i;
+    }
+    return pos;
+}
+
+/* Devolve o nome da proxima particao. Se a lista de nomes acabar,
+   cria um novo nome "pX.dat" e o anexa ao final da lista. */
+static char *proximo_nome_particao(Lista **atual, Lista **ultimo, int num_particao) {
+    if (*atual == NULL) {
+        char buffer[32];
+        sprintf(buffer, "p%d.dat", num_particao);
+        Lista *novo = cria(cria_str(buffer), NULL);
+        (*ultimo)->prox = novo;
+        *atual = novo;
+    }
+    char *nome = (*atual)->nome;
+    *ultimo = *atual;
+    *atual = (*atual)->prox;
+    return nome;
+}
+
+int selecao_natural(FILE *arq, Lista *nome_arquivos_saida, int M, int nFunc, int n) {
+    if (M < 1) M = 1;
+    if (n < 1) n = 1;
+    if (n > M) {
+        /* o conteudo do reservatorio precisa caber no array em memoria (passo 7) */
+        printf("Reservatorio (%d) maior que a memoria (%d): usando reservatorio = %d.\n", n, M, M);
+        n = M;
+    }
+
+    rewind(arq);
+
+    /* reservatorio fica em memoria secundaria (arquivo em disco) */
+    FILE *reservatorio = fopen(NOME_RESERVATORIO, "wb+");
+    if (reservatorio == NULL) {
+        printf("Erro ao criar o arquivo do reservatorio\n");
+        return 0;
+    }
+
+    TFunc **memoria = (TFunc **) calloc(M, sizeof(TFunc *));
+    int proximo = 0;          /* indice do proximo registro a ser lido da entrada */
+    int no_reservatorio = 0;  /* quantidade de registros no reservatorio */
+    int num_particoes = 0;
+
+    /* Passo 1: ler M registros do arquivo para a memoria */
+    for (int i = 0; i < M && proximo < nFunc; i++)
+        memoria[i] = le_registro_entrada(arq, proximo++);
+
+    Lista *nome_atual = nome_arquivos_saida;
+    Lista *ultimo_nome = nome_arquivos_saida;
+
+    /* cada volta deste laco gera uma particao */
+    while (posicao_menor_chave(memoria, M) != -1) {
+        char *nome_particao = proximo_nome_particao(&nome_atual, &ultimo_nome, num_particoes + 1);
+        FILE *p = fopen(nome_particao, "wb+");
+        if (p == NULL) {
+            printf("Erro ao criar a particao %s\n", nome_particao);
+            break;
+        }
+        printf("\n%s\n", nome_particao);
+
+        int gravados = 0;
+        int pos;
+        /* Passo 2: selecionar o registro r de menor chave da memoria */
+        while ((pos = posicao_menor_chave(memoria, M)) != -1) {
+            TFunc *r = memoria[pos];
+
+            /* Passo 3: gravar r na particao de saida */
+            fseek(p, gravados * tamanho_registro(), SEEK_SET);
+            salva_funcionario(r, p);
+            imprime_funcionario(r);
+            gravados++;
+            int ultima_chave = r->cod;
+            free(r);
+            memoria[pos] = NULL;
+
+            /* Passos 4 e 5: substituir r pelo proximo registro da entrada.
+               Se a chave dele for menor que a recem-gravada, vai para o reservatorio
+               e le-se o proximo. Com o reservatorio cheio, nao se le mais nada:
+               a memoria e esvaziada (em ordem) na particao atual. */
+            while (no_reservatorio < n && proximo < nFunc) {
+                TFunc *novo = le_registro_entrada(arq, proximo++);
+                if (novo == NULL) break;
+                if (novo->cod >= ultima_chave) {
+                    memoria[pos] = novo;
+                    break;
+                }
+                fseek(reservatorio, no_reservatorio * tamanho_registro(), SEEK_SET);
+                salva_funcionario(novo, reservatorio);
+                no_reservatorio++;
+                free(novo);
+            }
+        }
+
+        /* Passo 7: fechar a particao de saida */
+        fclose(p);
+        num_particoes++;
+
+        /* copiar os registros do reservatorio para o array em memoria */
+        for (int i = 0; i < no_reservatorio; i++) {
+            fseek(reservatorio, i * tamanho_registro(), SEEK_SET);
+            memoria[i] = le_funcionario(reservatorio);
+        }
+        /* esvaziar o reservatorio */
+        no_reservatorio = 0;
+        reservatorio = freopen(NOME_RESERVATORIO, "wb+", reservatorio);
+
+        /* completar a memoria com registros da entrada, se ainda houver */
+        for (int i = 0; i < M && proximo < nFunc; i++)
+            if (memoria[i] == NULL)
+                memoria[i] = le_registro_entrada(arq, proximo++);
+    }
+
+    free(memoria);
+    if (reservatorio) fclose(reservatorio);
+    remove(NOME_RESERVATORIO);
+
+    printf("\nTotal de particoes geradas: %d\n", num_particoes);
+    return num_particoes;
+}
+
+int conta_registros_particao(char *nome_particao) {
+    FILE *p = fopen(nome_particao, "rb");
+    if (p == NULL) return 0;
+    int qtd = 0;
+    TFunc *f;
+    while (1) {
+        fseek(p, qtd * tamanho_registro(), SEEK_SET);
+        f = le_funcionario(p);
+        if (f == NULL) break;
+        free(f);
+        qtd++;
+    }
+    fclose(p);
+    return qtd;
 }
