@@ -1,0 +1,16 @@
+{
+    "version":  "0.2.0",
+    "configurations":  [
+                           {
+                               "type":  "cppdbg",
+                               "cwd":  "${workspaceFolder}",
+                               "externalConsole":  false,
+                               "name":  "Rodar trabalho AEDS2",
+                               "MIMode":  "gdb",
+                               "miDebuggerPath":  "C:\\msys64\\ucrt64\\bin\\gdb.exe",
+                               "preLaunchTask":  "Compilar trabalho AEDS2",
+                               "program":  "${env:LOCALAPPDATA}/TrabalhoPraticoAeds2/trabalho.exe",
+                               "request":  "launch"
+                           }
+                       ]
+}
