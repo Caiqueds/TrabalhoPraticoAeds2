@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 
+
 #include "ordenacao_busca.h"
 #include "lista.h"
 #include "particoes.h"
