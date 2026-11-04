@@ -24,9 +24,7 @@ static int le_inteiro(int *valor) {
     return resultado;
 }
 
-int menu(){
-    int op;
-
+static void mostra_menu(void) {
     printf("\n\n**************MENU************** \n\nBASE DE DADOS\n");
 
     printf("\nDigite 1 para utilizar a base de dados funcionario de teste.");
@@ -45,8 +43,11 @@ int menu(){
     printf("\nDigite 11 para ordenar a base de dados utilizando o método insertion sort em disco. ");
     printf("\nDigite 12 para criar Árvore B+ de prefixo simples. ");
 
+}
 
-    printf("\nDigite -1 para sair: ");
+static int menu(void) {
+    int op;
+    printf("\nDigite uma opção (-1 para sair): ");
     int resultado = le_inteiro(&op);
     if (resultado == EOF) return -1;
     if (resultado == 0) return 0;
@@ -85,6 +86,7 @@ int main(){
     }
 
 
+    mostra_menu();
     int op = menu();
     int nFunc = 0;
 
