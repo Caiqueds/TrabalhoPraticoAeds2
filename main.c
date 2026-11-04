@@ -122,6 +122,7 @@ int main(){
                     //cria as particões que contém a base de dados de funcionários usando o método classificação interna
                     printf("\n\nGerando partições, utilizando o método de classificação interna.\n");
                     classificacao_interna(arq, nomes, nElementos, nFunc);
+                    nParticoes = (nFunc + nElementos - 1) / nElementos;
                     //salvando o ponteiro para o início da lista de nomes
                     prox = nomes;
                     criouparticoes=1;
@@ -129,8 +130,14 @@ int main(){
                 break;
             case (6):
                 if(crioulistadenomes){
+                    int M, tam_reservatorio;
+                    printf("\nInforme o tamanho M da memoria (registros): ");
+                    scanf("%d", &M);
+                    printf("Informe o tamanho do reservatorio (registros, no maximo M): ");
+                    scanf("%d", &tam_reservatorio);
                     printf("\n\nGerando partições, utilizando o método selecao natural.\n");
-                    selecao_natural(arq, nomes, nElementos, nFunc,1);
+                    //as particoes tem tamanho variavel, entao a funcao devolve quantas foram geradas
+                    nParticoes = selecao_natural(arq, nomes, M, nFunc, tam_reservatorio);
 
                     //salvando o ponteiro para o início da lista de nomes
                     prox = nomes;
@@ -143,18 +150,20 @@ int main(){
                     vetPilhas = (TPilha **) malloc(sizeof(TPilha *) * (nParticoes));
                     vetTopo = (int *) malloc(sizeof(int) * (nParticoes));
                     for(int p = 0 ; p < nParticoes ; p++){
+                        //cada particao pode ter um tamanho diferente (selecao natural)
+                        int tamParticao = conta_registros_particao(nomes->nome);
                         //alocando a memória para salvar uma pilha para cada particao
-                        vetPilhas[p] = (TPilha *) malloc(sizeof(TPilha) * (nElementos));
+                        vetPilhas[p] = (TPilha *) malloc(sizeof(TPilha) * (tamParticao > 0 ? tamParticao : 1));
                         //abrindo primeira partição para leitura
                         FILE *part = fopen(nomes->nome, "rb+");
                         printf("Partição %s \n", nomes->nome);
                         nomes = nomes->prox;
                         //imprimindo os funcionários gravados nas partições
-                        imprime_base_dados_funcionarios(part, nElementos);
+                        imprime_base_dados_funcionarios(part, tamParticao);
                         //inicializando os topos das pilhas
                         vetTopo[p] = -1;
                         //criando pilha através da leitura da partição
-                        cria_pilha_particao(vetPilhas[p], part, nElementos, &vetTopo[p],p);
+                        cria_pilha_particao(vetPilhas[p], part, tamParticao, &vetTopo[p],p);
                         //fechando a partição
                         fclose(part);
                     }
