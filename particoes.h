@@ -7,15 +7,16 @@
 
 /* Algoritmo de geracao de particoes por Classificacao Interna, recebe como parâmetro
 o arquivo de dados de entrada, a lista contendo os nomes dos arquivos de saída das partições,
-o númer de elementos M a ser armazenado em cada partição e o número de registro total do arquivo.*/
-void classificacao_interna(FILE *arq, Lista *nome_arquivos_saida, int M, int nFunc);
+o númer de elementos M a ser armazenado em cada partição e o número de registro total do arquivo.
+Retorna o número de partições geradas ou zero em caso de falha.*/
+int classificacao_interna(FILE *arq, Lista *nome_arquivos_saida, int M, int nFunc);
 
 /*Algoritmo a ser implementado no trabalho de geracao de particoes por Selecao Natural recebe como parâmetro
 o arquivo de dados de entrada, a lista contendo os nomes dos arquivos de saída das partições,
 o númer de elementos M a ser armazenado em cada partição e o número de registro total do arquivo e o tamanho do reservatório.
 Fiquem a vontade para modificar a estrutura, foi uma sugestão.*/
 int selecao_natural(FILE *arq, Lista *nome_arquivos_saida, int M, int nFunc, int n);
-/* Retorna o numero de particoes geradas. As particoes tem tamanhos variaveis;
+/* Retorna o numero de particoes geradas ou zero em caso de falha. As particoes tem tamanhos variaveis;
    se a lista de nomes acabar, novos nomes (pX.dat) sao anexados ao final dela. */
 
 /* Conta quantos registros existem em um arquivo de particao. */

@@ -67,23 +67,11 @@ void imprime_pilha(TPilha *pilha, int *topo) {
 
 void cria_pilha_particao(TPilha *pilha, FILE *arq, int nFunc, int *vetTopo, int id_particao){
 
-    int lim=nFunc-1;
-
-    rewind(arq);
-    int i = nFunc-1;
-    fseek(arq,  0 * sizeof (TFunc), SEEK_SET);
-    if(arq != NULL) {
-        int aux = 1;
-        do{
-            fseek(arq, (i) * tamanho_registro(), SEEK_SET);
-            TFunc *func = le_funcionario(arq);
-            if(func){
-                push(pilha,lim,vetTopo,func,id_particao);
-                i--;
-            }else aux = 0;
-        }while(aux);
+    for (int i = nFunc - 1; i >= 0; i--) {
+        if (fseek(arq, (long)i * tamanho_registro(), SEEK_SET) != 0) break;
+        TFunc *func = le_funcionario(arq);
+        if (func == NULL) break;
+        push(pilha, nFunc - 1, vetTopo, func, id_particao);
     }
-    else printf("Erro ao abrir arquivo\n");
-
-    imprime_pilha(pilha,vetTopo);
+    imprime_pilha(pilha, vetTopo);
 }

@@ -23,16 +23,18 @@ typedef struct NoV {
 } TNoV;
 
 
+/* As duas funções retornam 1 em caso de sucesso ou 0 em caso de falha. */
+
 /*Algoritmo de intercalacao de particoes básico, recebe
 o nome do arquivo de saída, o número de partições a serem intercaladas
 e uma lista com os nomes das partições de entrada a serem lidas.*/
-void intercalacao_basico(char *nome_arquivo_saida, int num_p, Lista *nome_particoes);
+int intercalacao_basico(char *nome_arquivo_saida, int num_p, Lista *nome_particoes);
 
 /* Algoritmo de intercalacao de particoes usando arvore de vencedores a ser implementado no trabalho,
  fiquem a vontade para modificar a estrutura dos parâmetros, somente uma sugestão*/
 // Algoritmo de intercalação usando árvore binária de vencedores
 
 
-void intercalacao_arvore_vencedores(char *nome_arquivo_saida, int num_p, Lista *nome_particoes);
+int intercalacao_arvore_vencedores(char *nome_arquivo_saida, int num_p, Lista *nome_particoes);
 
 #endif

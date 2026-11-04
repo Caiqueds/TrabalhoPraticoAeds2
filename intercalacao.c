@@ -4,92 +4,69 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void intercalacao_basico(char *nome_arquivo_saida, int num_p, Lista *nome_particoes) {
-
-    int fim = 0; //variavel que controla fim do procedimento
-    FILE *out; //declara ponteiro para arquivo
-
-    //abre arquivo de saida para escrita
-    if ((out = fopen(nome_arquivo_saida, "wb")) == NULL) {
-        printf("Erro ao abrir arquivo de sa?da\n");
-    } else {
-        //cria vetor de particoes
-        TVet v[num_p];
-
-        //abre arquivos das particoes, colocando variavel de arquivo no campo f do vetor
-        //e primeiro funcionario do arquivo no campo func do vetor
-        for (int i=0; i < num_p; i++) {
-            v[i].f = fopen(nome_particoes->nome, "rb");
-            v[i].aux_p = 0;
-            if (v[i].f != NULL) {
-                fseek(v[i].f, v[i].aux_p * tamanho_registro(), SEEK_SET);
-                TFunc *f = le_funcionario(v[i].f);
-                if (f == NULL) {
-                    //arquivo estava vazio
-                    //coloca HIGH VALUE nessa posi??o do vetor
-                    v[i].func = funcionario(INT_MAX, "","","",0);
-                }
-                else {
-                    //conseguiu ler funcionario, coloca na posi??o atual do vetor
-                    v[i].func = f;
-                }
-            }
-            else {
-                fim = 1;
-            }
-            nome_particoes = nome_particoes->prox;
-        }
-
-        int aux = 0;
-        while (!(fim)) { //conseguiu abrir todos os arquivos
-            int menor = INT_MAX;
-            int pos_menor;
-            //encontra o funcionario com menor chave no vetor
-            for(int i = 0; i < num_p; i++){
-                if(v[i].func->cod < menor){
-                    menor = v[i].func->cod;
-                    pos_menor = i;
-                }
-            }
-            if (menor == INT_MAX) {
-                fim = 1; //terminou processamento
-            }
-            else {
-                //salva funcionario no arquivo de saída
-                fseek(out, aux * tamanho_registro(), SEEK_SET);
-                salva_funcionario(v[pos_menor].func, out);
-                //atualiza posição pos_menor do vetor com pr?ximo funcionario do arquivo
-                v[pos_menor].aux_p++;
-                fseek(v[pos_menor].f, v[pos_menor].aux_p * tamanho_registro(), SEEK_SET);
-                TFunc *f = le_funcionario(v[pos_menor].f);
-                aux++;
-                if (f == NULL) {
-                    //arquivo estava vazio
-                    //coloca HIGH VALUE nessa posiçao do vetor
-                    v[pos_menor].func = funcionario(INT_MAX, "", "", "",0.0);
-                }
-                else {
-                    v[pos_menor].func = f;
-                }
-
-            }
-        }
-
-        //fecha arquivos das partiÇões de entrada
-        for(int i = 0; i < num_p; i++){
-            fclose(v[i].f);
-        //    free(v[i].func);
-        }
-        //fecha arquivo de saída
-        fclose(out);
+int intercalacao_basico(char *nome_arquivo_saida, int num_p, Lista *nome_particoes) {
+    if (num_p <= 0) return 0;
+    TVet *v = calloc(num_p, sizeof(*v));
+    FILE *out = NULL;
+    int sucesso = 0;
+    if (v == NULL) {
+        printf("Não foi possível alocar memória para a intercalação.\n");
+        return 0;
     }
 
+    for (int i = 0; i < num_p; i++, nome_particoes = nome_particoes->prox) {
+        if (nome_particoes == NULL) goto fim;
+        v[i].f = fopen(nome_particoes->nome, "rb");
+        if (v[i].f == NULL) {
+            printf("Não foi possível abrir a partição %s.\n", nome_particoes->nome);
+            goto fim;
+        }
+        v[i].func = le_funcionario(v[i].f);
+        if (ferror(v[i].f)) goto fim;
+        v[i].aux_p = 1;
+    }
 
+    out = fopen(nome_arquivo_saida, "wb");
+    if (out == NULL) goto fim;
+
+    for (int pos_saida = 0; ; pos_saida++) {
+        int menor = -1;
+        for (int i = 0; i < num_p; i++) {
+            if (v[i].func != NULL && (menor < 0 || v[i].func->cod < v[menor].func->cod))
+                menor = i;
+        }
+        if (menor < 0) break;
+
+        if (fseek(out, (long)pos_saida * tamanho_registro(), SEEK_SET) != 0) goto fim;
+        salva_funcionario(v[menor].func, out);
+        if (ferror(out)) goto fim;
+
+        if (fseek(v[menor].f, (long)v[menor].aux_p * tamanho_registro(), SEEK_SET) != 0) goto fim;
+        free(v[menor].func);
+        v[menor].func = le_funcionario(v[menor].f);
+        if (ferror(v[menor].f)) goto fim;
+        v[menor].aux_p++;
+    }
+    sucesso = 1;
+
+fim:
+    for (int i = 0; i < num_p; i++) {
+        if (v[i].f != NULL) fclose(v[i].f);
+        free(v[i].func);
+    }
+    free(v);
+    if (out != NULL) {
+        if (fclose(out) != 0) sucesso = 0;
+        if (!sucesso) remove(nome_arquivo_saida);
+    }
+    if (!sucesso) printf("A intercalação básica não foi concluída.\n");
+    return sucesso;
 }
 
 // Função auxiliar para criar os nós folha da árvore
-TNoV* cria_no_v(TFunc *func, FILE *f) {
+static TNoV* cria_no_v(TFunc *func, FILE *f) {
     TNoV *novo = (TNoV*) malloc(sizeof(TNoV));
+    if (novo == NULL) return NULL;
     novo->vencedor = func;
     novo->endVencedor = novo; // A folha aponta para si mesma como origem
     novo->f = f;
@@ -102,124 +79,104 @@ TNoV* cria_no_v(TFunc *func, FILE *f) {
 
 
 
-void intercalacao_arvore_vencedores(char *nome_arquivo_saida, int num_p, Lista *nome_particoes) {
-    FILE *out = fopen(nome_arquivo_saida, "wb");
-    if (!out) {
-        printf("Erro ao abrir arquivo de saída\n");
-        return;
+/* Propaga o menor registro entre os dois filhos, ignorando folhas esgotadas. */
+static void atualiza_vencedor(TNoV *no) {
+    TNoV *esq = no->esq;
+    TNoV *dir = no->dir;
+    TNoV *menor = esq;
+    if (esq->vencedor == NULL ||
+        (dir->vencedor != NULL && dir->vencedor->cod < esq->vencedor->cod)) {
+        menor = dir;
+    }
+    no->vencedor = menor->vencedor;
+    no->endVencedor = menor->endVencedor;
+}
+
+int intercalacao_arvore_vencedores(char *nome_arquivo_saida, int num_p, Lista *nome_particoes) {
+    if (num_p <= 0 || num_p > INT_MAX / 2) {
+        printf("Quantidade inválida de partições.\n");
+        return 0;
     }
 
-    // Fila para auxiliar na construção da árvore (tamanho máximo 2*N-1)
-    TNoV *fila[num_p * 2];
-    int inicio = 0, fim = 0;
-    Lista *p = nome_particoes;
+    /* A fila contém primeiro as folhas e depois os nós internos. */
+    TNoV **fila = malloc((size_t)num_p * 2 * sizeof(*fila));
+    if (fila == NULL) {
+        printf("Não foi possível alocar a árvore de vencedores.\n");
+        return 0;
+    }
+    int inicio = 0, fim = 0, folhas = 0;
+    int sucesso = 0;
+    FILE *out = NULL;
 
-    // PASSO 1: Inicialização (Criar as folhas com o primeiro registo de cada partição)
-    for (int i = 0; i < num_p; i++) {
+    for (Lista *p = nome_particoes; folhas < num_p; p = p->prox) {
+        if (p == NULL) goto limpar;
         FILE *f = fopen(p->nome, "rb");
-        TFunc *func = NULL;
-        if (f != NULL) {
-            func = le_funcionario(f);
+        if (f == NULL) {
+            printf("Não foi possível abrir a partição %s.\n", p->nome);
+            goto limpar;
         }
-        fila[fim++] = cria_no_v(func, f);
-        p = p->prox;
+        TFunc *func = le_funcionario(f);
+        TNoV *folha = cria_no_v(func, f);
+        if (folha == NULL || ferror(f)) {
+            free(folha);
+            free(func);
+            fclose(f);
+            goto limpar;
+        }
+        fila[fim++] = folha;
+        folhas++;
     }
 
-    // PASSO 2: Combinação (Juntar pares de nós até restar apenas 1 nó raiz na fila)
     while (fim - inicio > 1) {
-        TNoV *esq = fila[inicio++];
-        TNoV *dir = fila[inicio++];
-
-        TNoV *pai = (TNoV*) malloc(sizeof(TNoV));
-        pai->esq = esq;
-        pai->dir = dir;
-        pai->f = NULL;
-        pai->aux_p = 0;
-        pai->pai = NULL;
-        esq->pai = pai;
-        dir->pai = pai;
-
-        int cod_esq = (esq->vencedor != NULL) ? esq->vencedor->cod : INT_MAX;
-        int cod_dir = (dir->vencedor != NULL) ? dir->vencedor->cod : INT_MAX;
-
-        if (cod_esq <= cod_dir) {
-            pai->vencedor = esq->vencedor;
-            pai->endVencedor = esq->endVencedor;
-        } else {
-            pai->vencedor = dir->vencedor;
-            pai->endVencedor = dir->endVencedor;
-        }
-
+        TNoV *pai = cria_no_v(NULL, NULL);
+        if (pai == NULL) goto limpar;
+        pai->esq = fila[inicio++];
+        pai->dir = fila[inicio++];
+        pai->esq->pai = pai;
+        pai->dir->pai = pai;
+        atualiza_vencedor(pai);
         fila[fim++] = pai;
     }
 
-    // PASSO 3: Intercalação (Gravação do menor registo e recalculamento dos vencedores)
+    out = fopen(nome_arquivo_saida, "wb");
+    if (out == NULL) {
+        printf("Não foi possível abrir o arquivo de saída %s.\n", nome_arquivo_saida);
+        goto limpar;
+    }
+
     TNoV *raiz = fila[inicio];
-    int pos_saida = 0; // RRN do proximo registro a gravar na saida
-
-    while (raiz != NULL && raiz->vencedor != NULL && raiz->vencedor->cod != INT_MAX) {
-        // 1. Grava o menor elemento no ficheiro final
-        fseek(out, pos_saida * tamanho_registro(), SEEK_SET);
+    for (int pos_saida = 0; raiz->vencedor != NULL; pos_saida++) {
+        if (fseek(out, (long)pos_saida * tamanho_registro(), SEEK_SET) != 0) goto limpar;
         salva_funcionario(raiz->vencedor, out);
-        pos_saida++;
+        if (ferror(out)) goto limpar;
 
-        // 2. Encontra a folha de onde veio esse vencedor
         TNoV *folha = raiz->endVencedor;
-
-        // 3. Liberta o registo que acabou de ser gravado
+        if (fseek(folha->f, (long)folha->aux_p * tamanho_registro(), SEEK_SET) != 0) goto limpar;
         free(folha->vencedor);
-
-        // 4. Lê o próximo funcionário da mesma partição
-        // posiciona no proximo registro (registros ocupam tamanho_registro() bytes, com padding)
-        fseek(folha->f, folha->aux_p * tamanho_registro(), SEEK_SET);
         folha->vencedor = le_funcionario(folha->f);
+        if (ferror(folha->f)) goto limpar;
         folha->aux_p++;
 
-        // Se a partição chegou ao fim, atribui um nó Dummy (com código infinito)
-        if (folha->vencedor == NULL) {
-            folha->vencedor = (TFunc*) calloc(1, sizeof(TFunc));
-            folha->vencedor->cod = INT_MAX;
-        }
-
-        // 5. Sobe a árvore recalculando os vencedores até à raiz
-        TNoV *atual = folha->pai;
-        while (atual != NULL) {
-            int cod_esq = (atual->esq != NULL && atual->esq->vencedor != NULL) ? atual->esq->vencedor->cod : INT_MAX;
-            int cod_dir = (atual->dir != NULL && atual->dir->vencedor != NULL) ? atual->dir->vencedor->cod : INT_MAX;
-
-            if (cod_esq <= cod_dir) {
-                atual->vencedor = atual->esq->vencedor;
-                atual->endVencedor = atual->esq->endVencedor;
-            } else {
-                atual->vencedor = atual->dir->vencedor;
-                atual->endVencedor = atual->dir->endVencedor;
-            }
-
-            atual = atual->pai;
+        for (TNoV *no = folha->pai; no != NULL; no = no->pai) {
+            atualiza_vencedor(no);
         }
     }
+    sucesso = 1;
 
-    // PASSO 4: Limpeza de Ficheiros e Memória
-    for (int i = 0; i < num_p; i++) {
-        if (fila[i]->f != NULL) {
-            fclose(fila[i]->f);
-            fila[i]->f = NULL;
-        }
-        if (fila[i]->vencedor != NULL) {
-            free(fila[i]->vencedor);
-            fila[i]->vencedor = NULL;
-        }
+limpar:
+    for (int i = 0; i < folhas; i++) {
+        fclose(fila[i]->f);
+        free(fila[i]->vencedor);
     }
-
     for (int i = 0; i < fim; i++) {
-        if (fila[i] != NULL) {
-            free(fila[i]);
-        }
+        free(fila[i]);
     }
-
-    fclose(out);
-
-    printf("\nIntercalacao com Arvore de Vencedores concluida com sucesso!\n");
+    free(fila);
+    if (out != NULL) {
+        if (fclose(out) != 0) sucesso = 0;
+        if (!sucesso) remove(nome_arquivo_saida);
+    }
+    if (sucesso) printf("\nIntercalação com Árvore de Vencedores concluída com sucesso!\n");
+    else printf("A intercalação com Árvore de Vencedores não foi concluída.\n");
+    return sucesso;
 }
-
-

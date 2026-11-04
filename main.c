@@ -14,6 +14,16 @@
 #include "intercalacao.h"
 #include "arvore_binaria.h"
 
+static int le_inteiro(int *valor) {
+    int resultado = scanf("%d", valor);
+    if (resultado == 0) {
+        int c;
+        while ((c = getchar()) != '\n' && c != EOF) {
+        }
+    }
+    return resultado;
+}
+
 int menu(){
     int op;
 
@@ -37,8 +47,9 @@ int menu(){
 
 
     printf("\nDigite -1 para sair: ");
-    scanf("%d", &op);
-
+    int resultado = le_inteiro(&op);
+    if (resultado == EOF) return -1;
+    if (resultado == 0) return 0;
     return op;
 
 }
@@ -80,12 +91,7 @@ int main(){
     int nParticoes = 0, nElementos = 0;
     Lista  * nomes = NULL;
 
-    TPilha **vetPilhas = NULL;
-    int crioubase = 0, crioulistadenomes = 0, criouparticoes = 0, crioupilhas = 0;
-
-    //ponteiro para salvar o início da lista de nomes
-    Lista *prox = NULL;
-    int *vetTopo = NULL;
+    int crioubase = 0;
 
     while(op!=-1){
         switch (op){
@@ -94,6 +100,7 @@ int main(){
                 nFunc = 20;
                 cria_base_dados_funcionarios_teste(arq, arqIndicePrimario, arqIndicePrimarioNaoOrdenado, nFunc);
                 crioubase = 1;
+                nParticoes = 0;
                 break;
             case (2):
                 //imprime a base de dados dos funcionários
@@ -111,87 +118,106 @@ int main(){
                 }else  printf("Indice primario inexistente para ser impresso, será criado após a definição da base de dados utilizando a opção 1 do menu!!!\n");
                 break;
             case (4):
-                nParticoes = 10;
+                libera(nomes);
+                nomes = NULL;
+                nParticoes = 0;
                 nElementos = 2;
-                printf("\n\nA estrutura de interpolação será composta por 10 arquivos de no máximo 2 elementos.\n");
-                nomes = cria("p1.dat", cria("p2.dat", cria("p3.dat", cria("p4.dat", cria("p5.dat",  cria("p6.dat",  cria("p7.dat",  cria("p8.dat",  cria("p9.dat",  cria("p10.dat", NULL))))))))));
-                crioulistadenomes = 1;
+                printf("\nLista inicial com 10 nomes de partições.\n");
+                for (int i = 10; i >= 1; i--) {
+                    char nome[32];
+                    snprintf(nome, sizeof(nome), "p%d.dat", i);
+                    nomes = cria(cria_str(nome), nomes);
+                }
                 imprime(nomes);
                 break;
             case (5):
-                if(crioulistadenomes){
-                    //cria as particões que contém a base de dados de funcionários usando o método classificação interna
-                    printf("\n\nGerando partições, utilizando o método de classificação interna.\n");
-                    classificacao_interna(arq, nomes, nElementos, nFunc);
-                    nParticoes = (nFunc + nElementos - 1) / nElementos;
-                    //salvando o ponteiro para o início da lista de nomes
-                    prox = nomes;
-                    criouparticoes=1;
-                }else printf("Lista de nomes de arquivos inexistente para gerar partições, crie a estrutura de interpolação utilizando a opção 4 do menu!!!\n");
-                break;
             case (6):
-                if(crioulistadenomes){
+                if (!crioubase) {
+                    printf("Crie a base de dados pela opção 1.\n");
+                    break;
+                }
+                if (nomes == NULL) {
+                    printf("Prepare a lista de partições pela opção 4.\n");
+                    break;
+                }
+
+                if (op == 5) {
+                    printf("\nGerando partições por classificação interna.\n");
+                    nParticoes = classificacao_interna(arq, nomes, nElementos, nFunc);
+                } else {
                     int M, tam_reservatorio;
-                    printf("\nInforme o tamanho M da memoria (registros): ");
-                    scanf("%d", &M);
-                    printf("Informe o tamanho do reservatorio (registros, no maximo M): ");
-                    scanf("%d", &tam_reservatorio);
-                    printf("\n\nGerando partições, utilizando o método selecao natural.\n");
-                    //as particoes tem tamanho variavel, entao a funcao devolve quantas foram geradas
-                    nParticoes = selecao_natural(arq, nomes, M, nFunc, tam_reservatorio);
-
-                    //salvando o ponteiro para o início da lista de nomes
-                    prox = nomes;
-                    criouparticoes=1;
-                }else printf("Lista de nomes de arquivos inexistente para gerar partições, crie a estrutura de interpolação utilizando a opção  4 do menu!!!\n");
-                break;
-           case (7):
-                if(criouparticoes){
-                    //criando pilha com o conteúdo das partições geradas
-                    vetPilhas = (TPilha **) malloc(sizeof(TPilha *) * (nParticoes));
-                    vetTopo = (int *) malloc(sizeof(int) * (nParticoes));
-                    for(int p = 0 ; p < nParticoes ; p++){
-                        //cada particao pode ter um tamanho diferente (selecao natural)
-                        int tamParticao = conta_registros_particao(nomes->nome);
-                        //alocando a memória para salvar uma pilha para cada particao
-                        vetPilhas[p] = (TPilha *) malloc(sizeof(TPilha) * (tamParticao > 0 ? tamParticao : 1));
-                        //abrindo primeira partição para leitura
-                        FILE *part = fopen(nomes->nome, "rb+");
-                        printf("Partição %s \n", nomes->nome);
-                        nomes = nomes->prox;
-                        //imprimindo os funcionários gravados nas partições
-                        imprime_base_dados_funcionarios(part, tamParticao);
-                        //inicializando os topos das pilhas
-                        vetTopo[p] = -1;
-                        //criando pilha através da leitura da partição
-                        cria_pilha_particao(vetPilhas[p], part, tamParticao, &vetTopo[p],p);
-                        //fechando a partição
-                        fclose(part);
+                    printf("\nInforme o tamanho M da memória (registros): ");
+                    if (le_inteiro(&M) != 1 || M < 1) {
+                        printf("O tamanho da memória deve ser um inteiro positivo.\n");
+                        break;
                     }
-                    crioupilhas = 1;
-                    nomes = prox;
-                }else printf("Partições não foram criadas, crie as partições utilizando as opções 5 ou 6  do menu!!!\n");
+                    printf("Informe o tamanho do reservatório (registros, no máximo M): ");
+                    if (le_inteiro(&tam_reservatorio) != 1 || tam_reservatorio < 1) {
+                        printf("O tamanho do reservatório deve ser um inteiro positivo.\n");
+                        break;
+                    }
+                    printf("\nGerando partições por seleção natural.\n");
+                    nParticoes = selecao_natural(arq, nomes, M, nFunc, tam_reservatorio);
+                }
                 break;
+            case (7): {
+                if (nParticoes <= 0) {
+                    printf("Gere as partições pela opção 5 ou 6.\n");
+                    break;
+                }
+                Lista *particao = nomes;
+                for (int p = 0; p < nParticoes; p++, particao = particao->prox) {
+                    FILE *part = fopen(particao->nome, "rb");
+                    if (part == NULL) {
+                        printf("Não foi possível abrir a partição %s.\n", particao->nome);
+                        break;
+                    }
+                    int tamParticao = conta_registros_particao(particao->nome);
+                    TPilha *pilha = malloc(sizeof(*pilha) * (tamParticao > 0 ? tamParticao : 1));
+                    if (pilha == NULL) {
+                        fclose(part);
+                        printf("Não foi possível alocar a pilha da partição %s.\n", particao->nome);
+                        break;
+                    }
+                    printf("Partição %s\n", particao->nome);
+                    imprime_base_dados_funcionarios(part, tamParticao);
+                    int topo = -1;
+                    cria_pilha_particao(pilha, part, tamParticao, &topo, p);
+                    for (int i = 0; i <= topo; i++) {
+                        free(pilha[i].info);
+                    }
+                    free(pilha);
+                    fclose(part);
+                }
+                break;
+            }
             case (8):
-                if(criouparticoes){
-                    printf("\n\nIntercalando as partições, utilizando o método de intercalação basico.\n");
-                    intercalacao_basico("arquivo_intercalado.dat", nParticoes, nomes);
-                    //imprimindo o arquivo intercalado
-                    FILE *fi = fopen("arquivo_intercalado.dat","rb+");
-                    imprime_base_dados_funcionarios(fi,nFunc);
-                    fclose(fi);
-                }else printf("Partições não foram criadas, crie as partições utilizando as opções 5 ou 6 do menu!!!\n");
-                break;
-            case 9:
-    if(criouparticoes){
-        intercalacao_arvore_vencedores("arquivo_intercalado_arvore.dat", nParticoes, nomes);
+            case (9): {
+                if (nParticoes <= 0) {
+                    printf("Gere as partições pela opção 5 ou 6.\n");
+                    break;
+                }
 
-        printf("\n--- BASE DE DADOS INTERCALADA ---\n");
-        FILE *fi = fopen("arquivo_intercalado_arvore.dat", "rb");
-        imprime_base_dados_funcionarios(fi, nFunc);
-        fclose(fi);
-    } else printf("Partições não foram criadas, crie as partições utilizando as opções 5 ou 6 do menu!!!\n");
-    break;
+                char *saida;
+                if (op == 8) {
+                    saida = "arquivo_intercalado.dat";
+                    printf("\nIntercalando as partições pelo método básico.\n");
+                    if (!intercalacao_basico(saida, nParticoes, nomes)) break;
+                } else {
+                    saida = "arquivo_intercalado_arvore.dat";
+                    if (!intercalacao_arvore_vencedores(saida, nParticoes, nomes)) break;
+                }
+
+                FILE *fi = fopen(saida, "rb");
+                if (fi == NULL) {
+                    printf("Não foi possível abrir o arquivo %s.\n", saida);
+                    break;
+                }
+                printf("\n--- BASE DE DADOS INTERCALADA ---\n");
+                imprime_base_dados_funcionarios(fi, nFunc);
+                fclose(fi);
+                break;
+            }
             case (10):
                 //cria árvore binária em memória utilizando o arquivo de índice primário ordenado
                 if(crioubase==1){
@@ -223,7 +249,7 @@ int main(){
                     //procurando por um funcionário na base de dados usando o método de busca binária
                     int busca_codigo;
                     printf("\n\nInforme o codigo do funcionário procurado (digite -1 caso não queira procurar um funcionário): ");
-                    scanf("%d", &busca_codigo);
+                    if (le_inteiro(&busca_codigo) != 1) break;
                     if(busca_codigo!= -1){
                         TFunc* func = busca_binaria(busca_codigo, arq, nFunc);
 
@@ -249,19 +275,7 @@ int main(){
         op = menu();
     }
 
-	while(nomes!=NULL) {
-		prox = nomes->prox;
-		free(nomes);
-		nomes = prox;
-	}
-
-	if(vetPilhas!=NULL){
-        for(int p = 0; p <nParticoes; p++){
-            free(vetPilhas[p]);
-        }
-        free(vetPilhas);
-    }
-    free(vetTopo);
+    libera(nomes);
 
     fclose(arqIndicePrimario);
     fclose(arqIndicePrimarioNaoOrdenado);
