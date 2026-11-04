@@ -83,9 +83,143 @@ void intercalacao_basico(char *nome_arquivo_saida, int num_p, Lista *nome_partic
         //fecha arquivo de saída
         fclose(out);
     }
+
+
 }
 
-void intercalacao_arvore_de_vencedores(TPilha **pilha, int *vetTop, char *nome_arquivo_saida, int num_p){
-    //implementar primeira parte do trabalho
+// Função auxiliar para criar os nós folha da árvore
+TNoV* cria_no_v(TFunc *func, FILE *f) {
+    TNoV *novo = (TNoV*) malloc(sizeof(TNoV));
+    novo->vencedor = func;
+    novo->endVencedor = novo; // A folha aponta para si mesma como origem
+    novo->f = f;
+    novo->aux_p = 1; // o registro 0 ja foi lido na inicializacao
+    novo->pai = NULL;
+    novo->esq = NULL;
+    novo->dir = NULL;
+    return novo;
 }
+
+
+
+void intercalacao_arvore_vencedores(char *nome_arquivo_saida, int num_p, Lista *nome_particoes) {
+    FILE *out = fopen(nome_arquivo_saida, "wb");
+    if (!out) {
+        printf("Erro ao abrir arquivo de saída\n");
+        return;
+    }
+
+    // Fila para auxiliar na construção da árvore (tamanho máximo 2*N-1)
+    TNoV *fila[num_p * 2];
+    int inicio = 0, fim = 0;
+    Lista *p = nome_particoes;
+
+    // PASSO 1: Inicialização (Criar as folhas com o primeiro registo de cada partição)
+    for (int i = 0; i < num_p; i++) {
+        FILE *f = fopen(p->nome, "rb");
+        TFunc *func = NULL;
+        if (f != NULL) {
+            func = le_funcionario(f);
+        }
+        fila[fim++] = cria_no_v(func, f);
+        p = p->prox;
+    }
+
+    // PASSO 2: Combinação (Juntar pares de nós até restar apenas 1 nó raiz na fila)
+    while (fim - inicio > 1) {
+        TNoV *esq = fila[inicio++];
+        TNoV *dir = fila[inicio++];
+
+        TNoV *pai = (TNoV*) malloc(sizeof(TNoV));
+        pai->esq = esq;
+        pai->dir = dir;
+        pai->f = NULL;
+        pai->aux_p = 0;
+        pai->pai = NULL;
+        esq->pai = pai;
+        dir->pai = pai;
+
+        int cod_esq = (esq->vencedor != NULL) ? esq->vencedor->cod : INT_MAX;
+        int cod_dir = (dir->vencedor != NULL) ? dir->vencedor->cod : INT_MAX;
+
+        if (cod_esq <= cod_dir) {
+            pai->vencedor = esq->vencedor;
+            pai->endVencedor = esq->endVencedor;
+        } else {
+            pai->vencedor = dir->vencedor;
+            pai->endVencedor = dir->endVencedor;
+        }
+
+        fila[fim++] = pai;
+    }
+
+    // PASSO 3: Intercalação (Gravação do menor registo e recalculamento dos vencedores)
+    TNoV *raiz = fila[inicio];
+    int pos_saida = 0; // RRN do proximo registro a gravar na saida
+
+    while (raiz != NULL && raiz->vencedor != NULL && raiz->vencedor->cod != INT_MAX) {
+        // 1. Grava o menor elemento no ficheiro final
+        fseek(out, pos_saida * tamanho_registro(), SEEK_SET);
+        salva_funcionario(raiz->vencedor, out);
+        pos_saida++;
+
+        // 2. Encontra a folha de onde veio esse vencedor
+        TNoV *folha = raiz->endVencedor;
+
+        // 3. Liberta o registo que acabou de ser gravado
+        free(folha->vencedor);
+
+        // 4. Lê o próximo funcionário da mesma partição
+        // posiciona no proximo registro (registros ocupam tamanho_registro() bytes, com padding)
+        fseek(folha->f, folha->aux_p * tamanho_registro(), SEEK_SET);
+        folha->vencedor = le_funcionario(folha->f);
+        folha->aux_p++;
+
+        // Se a partição chegou ao fim, atribui um nó Dummy (com código infinito)
+        if (folha->vencedor == NULL) {
+            folha->vencedor = (TFunc*) calloc(1, sizeof(TFunc));
+            folha->vencedor->cod = INT_MAX;
+        }
+
+        // 5. Sobe a árvore recalculando os vencedores até à raiz
+        TNoV *atual = folha->pai;
+        while (atual != NULL) {
+            int cod_esq = (atual->esq != NULL && atual->esq->vencedor != NULL) ? atual->esq->vencedor->cod : INT_MAX;
+            int cod_dir = (atual->dir != NULL && atual->dir->vencedor != NULL) ? atual->dir->vencedor->cod : INT_MAX;
+
+            if (cod_esq <= cod_dir) {
+                atual->vencedor = atual->esq->vencedor;
+                atual->endVencedor = atual->esq->endVencedor;
+            } else {
+                atual->vencedor = atual->dir->vencedor;
+                atual->endVencedor = atual->dir->endVencedor;
+            }
+
+            atual = atual->pai;
+        }
+    }
+
+    // PASSO 4: Limpeza de Ficheiros e Memória
+    for (int i = 0; i < num_p; i++) {
+        if (fila[i]->f != NULL) {
+            fclose(fila[i]->f);
+            fila[i]->f = NULL;
+        }
+        if (fila[i]->vencedor != NULL) {
+            free(fila[i]->vencedor);
+            fila[i]->vencedor = NULL;
+        }
+    }
+
+    for (int i = 0; i < fim; i++) {
+        if (fila[i] != NULL) {
+            free(fila[i]);
+        }
+    }
+
+    fclose(out);
+
+    printf("\nIntercalacao com Arvore de Vencedores concluida com sucesso!\n");
+}
+
 

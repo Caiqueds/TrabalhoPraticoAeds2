@@ -11,6 +11,18 @@ typedef struct vetor{
     FILE *f;
 }TVet;
 
+/* Estrutura do Nó da Árvore de Vencedores */
+typedef struct NoV {
+    TFunc *vencedor;             // Aponta para o registro com a menor chave
+    struct NoV *endVencedor;     // Aponta para o nó folha original do vencedor
+    FILE *f;                     // Arquivo associado (usado apenas nas folhas)
+    int aux_p;                   // Posicao (RRN) do proximo registro a ler no arquivo (folhas)
+    struct NoV *pai;             // Ponteiro para o nó pai
+    struct NoV *dir;             // Ponteiro para o filho da direita
+    struct NoV *esq;             // Ponteiro para o filho da esquerda
+} TNoV;
+
+
 /*Algoritmo de intercalacao de particoes básico, recebe
 o nome do arquivo de saída, o número de partições a serem intercaladas
 e uma lista com os nomes das partições de entrada a serem lidas.*/
@@ -18,6 +30,9 @@ void intercalacao_basico(char *nome_arquivo_saida, int num_p, Lista *nome_partic
 
 /* Algoritmo de intercalacao de particoes usando arvore de vencedores a ser implementado no trabalho,
  fiquem a vontade para modificar a estrutura dos parâmetros, somente uma sugestão*/
-void intercalacao_arvore_de_vencedores(TPilha **pilha, int *vetTop, char *nome_arquivo_saida, int num_p);
+// Algoritmo de intercalação usando árvore binária de vencedores
+
+
+void intercalacao_arvore_vencedores(char *nome_arquivo_saida, int num_p, Lista *nome_particoes);
 
 #endif
