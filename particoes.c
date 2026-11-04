@@ -72,41 +72,17 @@ int classificacao_interna(FILE *arq, Lista *nome_arquivos_saida, int M, int nFun
     return num_particoes;
 }
 
-/* ===================== SELECAO NATURAL ===================== */
-
-#define NOME_RESERVATORIO "reservatorio.dat"
-
-/* Le o registro de indice 'pos' do arquivo de entrada (NULL se nao existir). */
-static TFunc *le_registro_entrada(FILE *arq, int pos) {
-    if (fseek(arq, (long)pos * tamanho_registro(), SEEK_SET) != 0) return NULL;
-    return le_funcionario(arq);
-}
+/*Começo seleçao natural*/
 
 /* Retorna a posicao do registro de menor chave no array em memoria
    (posicoes vazias sao NULL). Retorna -1 se a memoria estiver vazia. */
-static int posicao_menor_chave(TFunc **memoria, int M) {
+int posicao_menor_chave(TFunc **memoria, int M) {
     int pos = -1;
     for (int i = 0; i < M; i++) {
         if (memoria[i] != NULL && (pos == -1 || memoria[i]->cod < memoria[pos]->cod))
             pos = i;
     }
     return pos;
-}
-
-/* Devolve o nome da proxima particao. Se a lista de nomes acabar,
-   cria um novo nome "pX.dat" e o anexa ao final da lista. */
-static char *proximo_nome_particao(Lista **atual, Lista **ultimo, int num_particao) {
-    if (*atual == NULL) {
-        char buffer[32];
-        sprintf(buffer, "p%d.dat", num_particao);
-        Lista *novo = cria(cria_str(buffer), NULL);
-        (*ultimo)->prox = novo;
-        *atual = novo;
-    }
-    char *nome = (*atual)->nome;
-    *ultimo = *atual;
-    *atual = (*atual)->prox;
-    return nome;
 }
 
 int selecao_natural(FILE *arq, Lista *nome_arquivos_saida, int M, int nFunc, int n) {
@@ -120,7 +96,7 @@ int selecao_natural(FILE *arq, Lista *nome_arquivos_saida, int M, int nFunc, int
     rewind(arq);
 
     /* reservatorio fica em memoria secundaria (arquivo em disco) */
-    FILE *reservatorio = fopen(NOME_RESERVATORIO, "wb+");
+    FILE *reservatorio = fopen("reservatorio.dat", "wb+");
     if (reservatorio == NULL) {
         printf("Erro ao criar o arquivo do reservatorio\n");
         return 0;
@@ -129,33 +105,42 @@ int selecao_natural(FILE *arq, Lista *nome_arquivos_saida, int M, int nFunc, int
     TFunc **memoria = calloc(M, sizeof(*memoria));
     if (memoria == NULL) {
         fclose(reservatorio);
-        remove(NOME_RESERVATORIO);
+        remove("reservatorio.dat");
         printf("Não foi possível alocar memória para a seleção natural.\n");
         return 0;
     }
+
     FILE *p = NULL;
     int proximo = 0;          /* indice do proximo registro a ser lido da entrada */
     int no_reservatorio = 0;  /* quantidade de registros no reservatorio */
     int num_particoes = 0;
+    Lista *atual = nome_arquivos_saida;
+    Lista *ultimo = NULL;
 
     /* Passo 1: ler M registros do arquivo para a memoria */
     for (int i = 0; i < M && proximo < nFunc; i++) {
-        memoria[i] = le_registro_entrada(arq, proximo++);
+        if (fseek(arq, (long)proximo * tamanho_registro(), SEEK_SET) != 0) goto falha;
+        memoria[i] = le_funcionario(arq);
         if (memoria[i] == NULL) goto falha;
+        proximo++;
     }
-
-    Lista *nome_atual = nome_arquivos_saida;
-    Lista *ultimo_nome = nome_arquivos_saida;
 
     /* cada volta deste laco gera uma particao */
     while (posicao_menor_chave(memoria, M) != -1) {
-        char *nome_particao = proximo_nome_particao(&nome_atual, &ultimo_nome, num_particoes + 1);
-        p = fopen(nome_particao, "wb+");
+        /* se acabaram os nomes da lista de particoes, cria um novo e anexa no final */
+        if (atual == NULL) {
+            char nome[20];
+            sprintf(nome, "p%d.dat", num_particoes + 1);
+            atual = cria(cria_str(nome), NULL);
+            ultimo->prox = atual;
+        }
+
+        p = fopen(atual->nome, "wb+");
         if (p == NULL) {
-            printf("Erro ao criar a particao %s\n", nome_particao);
+            printf("Erro ao criar a particao %s\n", atual->nome);
             goto falha;
         }
-        printf("\n%s\n", nome_particao);
+        printf("\n%s\n", atual->nome);
 
         int gravados = 0;
         int pos;
@@ -175,11 +160,13 @@ int selecao_natural(FILE *arq, Lista *nome_arquivos_saida, int M, int nFunc, int
 
             /* Passos 4 e 5: substituir r pelo proximo registro da entrada.
                Se a chave dele for menor que a recem-gravada, vai para o reservatorio
-               e le-se o proximo. Com o reservatorio cheio, nao se le mais nada:
+               e le o proximo. Com o reservatorio cheio, nao se le mais nada:
                a memoria e esvaziada (em ordem) na particao atual. */
             while (no_reservatorio < n && proximo < nFunc) {
-                TFunc *novo = le_registro_entrada(arq, proximo++);
+                if (fseek(arq, (long)proximo * tamanho_registro(), SEEK_SET) != 0) goto falha;
+                TFunc *novo = le_funcionario(arq);
                 if (novo == NULL) goto falha;
+                proximo++;
                 if (novo->cod >= ultima_chave) {
                     memoria[pos] = novo;
                     break;
@@ -200,6 +187,8 @@ int selecao_natural(FILE *arq, Lista *nome_arquivos_saida, int M, int nFunc, int
         p = NULL;
         if (resultado != 0) goto falha;
         num_particoes++;
+        ultimo = atual;
+        atual = atual->prox;
 
         /* copiar os registros do reservatorio para o array em memoria */
         for (int i = 0; i < no_reservatorio; i++) {
@@ -207,21 +196,23 @@ int selecao_natural(FILE *arq, Lista *nome_arquivos_saida, int M, int nFunc, int
             memoria[i] = le_funcionario(reservatorio);
             if (memoria[i] == NULL) goto falha;
         }
-        /* O próximo lote sobrescreve os registros do reservatório a partir do início. */
+        /* esvaziar o reservatorio: o proximo lote sobrescreve a partir do inicio */
         no_reservatorio = 0;
 
         /* completar a memoria com registros da entrada, se ainda houver */
         for (int i = 0; i < M && proximo < nFunc; i++) {
             if (memoria[i] == NULL) {
-                memoria[i] = le_registro_entrada(arq, proximo++);
+                if (fseek(arq, (long)proximo * tamanho_registro(), SEEK_SET) != 0) goto falha;
+                memoria[i] = le_funcionario(arq);
                 if (memoria[i] == NULL) goto falha;
+                proximo++;
             }
         }
     }
 
     free(memoria);
     fclose(reservatorio);
-    remove(NOME_RESERVATORIO);
+    remove("reservatorio.dat");
 
     printf("\nTotal de particoes geradas: %d\n", num_particoes);
     return num_particoes;
@@ -231,7 +222,7 @@ falha:
     for (int i = 0; i < M; i++) free(memoria[i]);
     free(memoria);
     fclose(reservatorio);
-    remove(NOME_RESERVATORIO);
+    remove("reservatorio.dat");
     printf("A seleção natural não foi concluída.\n");
     return 0;
 }
